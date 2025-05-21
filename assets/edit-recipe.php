@@ -3,129 +3,104 @@ require_once 'includes/db_connect.php';
 require_once 'includes/functions.php';
 session_start();
 
-// Verificar si el usuario está autenticado
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit;
 }
 
-// Obtener ID de la receta
-$recipeId = $_GET['id'] ?? null;
-
-if (!$recipeId) {
+if (!isset($_GET['id']) || empty($_GET['id'])) {
     header('Location: profile.php');
     exit;
 }
 
-// Obtener datos de la receta
-$recipe = getRecipeById($recipeId);
+$recipeId = $_GET['id'];
+$userId = $_SESSION['user_id'];
+
+// Obtener la receta
+global $recipesCollection;
+try {
+    $recipe = $recipesCollection->findOne([
+        '_id' => new MongoDB\BSON\ObjectId($recipeId),
+        'user_id' => new MongoDB\BSON\ObjectId($userId)
+    ]);
+} catch (Exception $e) {
+    header('Location: profile.php');
+    exit;
+}
 
 if (!$recipe) {
+    $_SESSION['error'] = "No se encontró la receta o no tienes permiso para editarla.";
     header('Location: profile.php');
     exit;
 }
 
-// Verificar que el usuario sea el propietario de la receta
-if ($recipe['user_id']->__toString() !== $_SESSION['user_id']) {
-    header('Location: profile.php');
-    exit;
-}
-
-// Obtener categorías para el formulario
 $categories = getAllCategories();
-
 $errors = [];
 $success = false;
 
-// Procesar el formulario cuando se envía
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Validar datos
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_recipe'])) {
     $title = trim($_POST['title'] ?? '');
-    $category = $_POST['category'] ?? '';
     $description = trim($_POST['description'] ?? '');
-    $ingredients = trim($_POST['ingredients'] ?? '');
-    $instructions = trim($_POST['instructions'] ?? '');
-    
-    // Validar título
+    $category = $_POST['category'] ?? '';
+    $ingredients = $_POST['ingredients'] ?? '';
+    $instructions = $_POST['instructions'] ?? '';
+
     if (empty($title)) {
-        $errors['title'] = 'Por favor, ingresa un título para la receta';
+        $errors['title'] = 'El título es obligatorio';
     }
-    
-    // Validar categoría
-    if (empty($category)) {
-        $errors['category'] = 'Por favor, selecciona una categoría';
-    }
-    
-    // Validar descripción
     if (empty($description)) {
-        $errors['description'] = 'Por favor, ingresa una descripción';
+        $errors['description'] = 'La descripción es obligatoria';
     }
-    
-    // Validar ingredientes
+    if (empty($category)) {
+        $errors['category'] = 'Debes seleccionar una categoría';
+    }
     if (empty($ingredients)) {
-        $errors['ingredients'] = 'Por favor, ingresa los ingredientes';
+        $errors['ingredients'] = 'Los ingredientes son obligatorios';
     }
-    
-    // Validar instrucciones
     if (empty($instructions)) {
-        $errors['instructions'] = 'Por favor, ingresa las instrucciones';
+        $errors['instructions'] = 'Las instrucciones son obligatorias';
     }
-    
-    // Procesar imagen si se ha subido
-    $imageUrl = null;
+
+    $imageUrl = $recipe['image_url'] ?? '';
+
     if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-        $maxSize = 5 * 1024 * 1024; // 5MB
-        
-        if (!in_array($_FILES['image']['type'], $allowedTypes)) {
-            $errors['image'] = 'El archivo debe ser una imagen (JPEG, PNG o GIF)';
-        } elseif ($_FILES['image']['size'] > $maxSize) {
-            $errors['image'] = 'La imagen no debe superar los 5MB';
+        $uploadResult = uploadImage($_FILES['image']);
+        if ($uploadResult['success']) {
+            $imageUrl = $uploadResult['url'];
         } else {
-            // Gen  {
-            $errors['image'] = 'La imagen no debe superar los 5MB';
-        }  {
-            // Generar nombre único para la imagen
-            $extension = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
-            $fileName = uniqid() . '.' . $extension;
-            $uploadPath = 'uploads/recipes/' . $fileName;
-            
-            // Crear directorio si no existe
-            if (!is_dir('uploads/recipes')) {
-                mkdir('uploads/recipes', 0777, true);
-            }
-            
-            // Mover archivo
-            if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadPath)) {
-                $imageUrl = $uploadPath;
-            } else {
-                $errors['image'] = 'Error al subir la imagen. Por favor, inténtalo de nuevo.';
-            }
+            $errors['image'] = $uploadResult['error'];
         }
     }
-    
-    // Si no hay errores, actualizar la receta
+
     if (empty($errors)) {
-        $result = updateRecipe(
-            $recipeId,
-            $title,
-            $category,
-            $description,
-            $ingredients,
-            $instructions,
-            $imageUrl
+        $updateData = [
+            'title' => $title,
+            'description' => $description,
+            'category' => $category,
+            'ingredients' => $ingredients,
+            'instructions' => $instructions,
+            'updated_at' => new MongoDB\BSON\UTCDateTime()
+        ];
+
+        if (!empty($imageUrl)) {
+            $updateData['image_url'] = $imageUrl;
+        }
+
+        $result = $recipesCollection->updateOne(
+            ['_id' => new MongoDB\BSON\ObjectId($recipeId)],
+            ['$set' => $updateData]
         );
-        
-        if ($result) {
+
+        if ($result->getModifiedCount() === 1) {
             $success = true;
-            // Actualizar datos de la receta
-            $recipe = getRecipeById($recipeId);
+            $recipe = $recipesCollection->findOne(['_id' => new MongoDB\BSON\ObjectId($recipeId)]);
         } else {
-            $errors['general'] = 'Error al actualizar la receta. Por favor, inténtalo de nuevo.';
+            $errors['general'] = 'No se pudo actualizar la receta. Por favor, inténtalo de nuevo.';
         }
     }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="es">
@@ -134,89 +109,288 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editar Receta - Recetas Deliciosas</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="assets/css/responsive.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <style>
+        /* Estilos específicos para la página de edición de recetas */
+        .edit-recipe-container {
+            background-color: var(--white);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 30px;
+            margin: 30px 0;
+        }
+        
+        .edit-recipe-header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .edit-recipe-header h1 {
+            margin-bottom: 10px;
+            color: var(--text-color);
+        }
+        
+        .edit-recipe-form {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+        
+        .form-group {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .form-group.full-width {
+            flex: 0 0 100%;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--medium-gray);
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+        }
+        
+        textarea.form-control {
+            min-height: 150px;
+            resize: vertical;
+        }
+        
+        .error-message {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        
+        .current-image {
+            margin-top: 10px;
+            text-align: center;
+        }
+        
+        .current-image img {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--medium-gray);
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        
+        /* Alertas */
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: var(--border-radius);
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
     
     <main class="container">
-        <div class="form-container recipe-form-container">
-            <h1 class="form-title">Editar Receta</h1>
+        <div class="edit-recipe-container">
+            <div class="edit-recipe-header">
+                <h1>Editar Receta</h1>
+                <p>Actualiza la información de tu receta</p>
+            </div>
             
             <?php if ($success): ?>
-                <div class="alert alert-success">
-                    Receta actualizada correctamente.
-                    <a href="recipe-details.php?id=<?php echo $recipeId; ?>" class="alert-link">Ver receta</a>
-                </div>
+            <div class="alert alert-success">
+                La receta se ha actualizado correctamente.
+            </div>
             <?php endif; ?>
             
             <?php if (isset($errors['general'])): ?>
-                <div class="alert alert-error">
-                    <?php echo $errors['general']; ?>
-                </div>
+            <div class="alert alert-error">
+                <?php echo $errors['general']; ?>
+            </div>
             <?php endif; ?>
             
-            <form id="recipeForm" class="needs-validation" method="POST" enctype="multipart/form-data" novalidate>
-                <div class="form-group">
-                    <label for="title">Título de la receta</label>
-                    <input type="text" id="title" name="title" class="form-control <?php echo isset($errors['title']) ? 'is-invalid' : ''; ?>" value="<?php echo htmlspecialchars($recipe['title']); ?>">
-                    <div id="titleError" class="error-message"><?php echo $errors['title'] ?? ''; ?></div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="category">Categoría</label>
-                    <select id="category" name="category" class="form-control <?php echo isset($errors['category']) ? 'is-invalid' : ''; ?>">
-                        <option value="">Selecciona una categoría</option>
-                        <?php foreach ($categories as $cat): ?>
-                        <option value="<?php echo htmlspecialchars($cat['name']); ?>" <?php echo $recipe['category'] === $cat['name'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($cat['name']); ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <div id="categoryError" class="error-message"><?php echo $errors['category'] ?? ''; ?></div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="description">Descripción</label>
-                    <textarea id="description" name="description" class="form-control <?php echo isset($errors['description']) ? 'is-invalid' : ''; ?>" rows="3"><?php echo htmlspecialchars($recipe['description']); ?></textarea>
-                    <div id="descriptionError" class="error-message"><?php echo $errors['description'] ?? ''; ?></div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="ingredients">Ingredientes (uno por línea)</label>
-                    <textarea id="ingredients" name="ingredients" class="form-control <?php echo isset($errors['ingredients']) ? 'is-invalid' : ''; ?>" rows="6"><?php echo htmlspecialchars($recipe['ingredients']); ?></textarea>
-                    <div id="ingredientsError" class="error-message"><?php echo $errors['ingredients'] ?? ''; ?></div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="instructions">Instrucciones (uno por línea)</label>
-                    <textarea id="instructions" name="instructions" class="form-control <?php echo isset($errors['instructions']) ? 'is-invalid' : ''; ?>" rows="8"><?php echo htmlspecialchars($recipe['instructions']); ?></textarea>
-                    <div id="instructionsError" class="error-message"><?php echo $errors['instructions'] ?? ''; ?></div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="image">Imagen de la receta (opcional)</label>
-                    <?php if (isset($recipe['image_url']) && !empty($recipe['image_url'])): ?>
-                    <div class="current-image">
-                        <p>Imagen actual:</p>
-                        <img src="<?php echo htmlspecialchars($recipe['image_url']); ?>" alt="<?php echo htmlspecialchars($recipe['title']); ?>" class="thumbnail">
-                        <p class="form-text text-muted">Sube una nueva imagen para reemplazar la actual.</p>
+            <form class="edit-recipe-form" method="POST" enctype="multipart/form-data">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="title">Título de la receta *</label>
+                        <input type="text" id="title" name="title" class="form-control <?php echo isset($errors['title']) ? 'is-invalid' : ''; ?>" value="<?php echo htmlspecialchars($recipe['title']); ?>">
+                        <div class="error-message"><?php echo $errors['title'] ?? ''; ?></div>
                     </div>
-                    <?php endif; ?>
-                    <input type="file" id="image" name="image" class="form-control-file <?php echo isset($errors['image']) ? 'is-invalid' : ''; ?>">
-                    <small class="form-text text-muted">Formatos permitidos: JPEG, PNG, GIF. Tamaño máximo: 5MB.</small>
-                    <div id="imageError" class="error-message"><?php echo $errors['image'] ?? ''; ?></div>
+                    
+                    <div class="form-group">
+                        <label for="category">Categoría *</label>
+                        <select id="category" name="category" class="form-control <?php echo isset($errors['category']) ? 'is-invalid' : ''; ?>">
+                            <option value="">Selecciona una categoría</option>
+                            <?php foreach ($categories as $cat): ?>
+                            <option value="<?php echo htmlspecialchars($cat['name']); ?>" <?php echo $recipe['category'] === $cat['name'] ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($cat['name']); ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="error-message"><?php echo $errors['category'] ?? ''; ?></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group full-width">
+                        <label for="description">Descripción *</label>
+                        <textarea id="description" name="description" class="form-control <?php echo isset($errors['description']) ? 'is-invalid' : ''; ?>"><?php echo htmlspecialchars($recipe['description']); ?></textarea>
+                        <div class="error-message"><?php echo $errors['description'] ?? ''; ?></div>
+                    </div>
+                </div>
+
+                
+                <div class="form-row">
+                    <div class="form-group full-width">
+                        <label for="ingredients">Ingredientes *</label>
+                        <textarea id="ingredients" name="ingredients" class="form-control <?php echo isset($errors['ingredients']) ? 'is-invalid' : ''; ?>" placeholder="Escribe cada ingrediente en una línea nueva"><?php echo htmlspecialchars($recipe['ingredients']); ?></textarea>
+                        <div class="error-message"><?php echo $errors['ingredients'] ?? ''; ?></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group full-width">
+                        <label for="instructions">Instrucciones *</label>
+                        <textarea id="instructions" name="instructions" class="form-control <?php echo isset($errors['instructions']) ? 'is-invalid' : ''; ?>" placeholder="Escribe cada paso en una línea nueva"><?php echo htmlspecialchars($recipe['instructions']); ?></textarea>
+                        <div class="error-message"><?php echo $errors['instructions'] ?? ''; ?></div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group full-width">
+                        <label for="image">Imagen de la receta</label>
+                        <input type="file" id="image" name="image" class="form-control <?php echo isset($errors['image']) ? 'is-invalid' : ''; ?>" accept="image/*">
+                        <small class="form-text text-muted">Deja este campo vacío si no deseas cambiar la imagen actual.</small>
+                        <div class="error-message"><?php echo $errors['image'] ?? ''; ?></div>
+                        
+                        <?php if (isset($recipe['image_url']) && !empty($recipe['image_url'])): ?>
+                        <div class="current-image">
+                            <p>Imagen actual:</p>
+                            <img src="<?php echo htmlspecialchars($recipe['image_url']); ?>" alt="<?php echo htmlspecialchars($recipe['title']); ?>">
+                        </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 
                 <div class="form-actions">
                     <a href="profile.php" class="btn btn-outline">Cancelar</a>
-                    <button type="submit" class="btn">Guardar Cambios</button>
+                    <button type="submit" name="update_recipe" class="btn">Guardar Cambios</button>
                 </div>
             </form>
         </div>
     </main>
     
     <?php include 'includes/footer.php'; ?>
-    <script src="assets/js/validation.js"></script>
+    
+    <script>
+        // Script para validación del formulario en el lado del cliente
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('.edit-recipe-form');
+            
+            form.addEventListener('submit', function(event) {
+                let hasErrors = false;
+                
+                // Validar título
+                const title = document.getElementById('title');
+                if (title.value.trim() === '') {
+                    showError(title, 'El título es obligatorio');
+                    hasErrors = true;
+                } else {
+                    clearError(title);
+                }
+                
+                // Validar categoría
+                const category = document.getElementById('category');
+                if (category.value === '') {
+                    showError(category, 'Debes seleccionar una categoría');
+                    hasErrors = true;
+                } else {
+                    clearError(category);
+                }
+                
+                // Validar descripción
+                const description = document.getElementById('description');
+                if (description.value.trim() === '') {
+                    showError(description, 'La descripción es obligatoria');
+                    hasErrors = true;
+                } else {
+                    clearError(description);
+                }
+                
+            
+                // Validar ingredientes e instrucciones
+                const ingredients = document.getElementById('ingredients');
+                if (ingredients.value.trim() === '') {
+                    showError(ingredients, 'Los ingredientes son obligatorios');
+                    hasErrors = true;
+                } else {
+                    clearError(ingredients);
+                }
+                
+                const instructions = document.getElementById('instructions');
+                if (instructions.value.trim() === '') {
+                    showError(instructions, 'Las instrucciones son obligatorias');
+                    hasErrors = true;
+                } else {
+                    clearError(instructions);
+                }
+                
+                // Si hay errores, prevenir el envío del formulario
+                if (hasErrors) {
+                    event.preventDefault();
+                    // Scroll al primer error
+                    const firstError = document.querySelector('.is-invalid');
+                    if (firstError) {
+                        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            });
+            
+            // Función para mostrar error
+            function showError(element, message) {
+                element.classList.add('is-invalid');
+                const errorDiv = element.nextElementSibling;
+                if (errorDiv && errorDiv.classList.contains('error-message')) {
+                    errorDiv.textContent = message;
+                }
+            }
+            
+            // Función para limpiar error
+            function clearError(element) {
+                element.classList.remove('is-invalid');
+                const errorDiv = element.nextElementSibling;
+                if (errorDiv && errorDiv.classList.contains('error-message')) {
+                    errorDiv.textContent = '';
+                }
+            }
+        });
+    </script>
 </body>
 </html>

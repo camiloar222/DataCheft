@@ -1,5 +1,4 @@
 <?php
-
 require_once 'includes/db_connect.php';
 require_once 'includes/functions.php';
 session_start();
@@ -7,7 +6,7 @@ session_start();
 // Obtener recetas destacadas
 $featuredRecipes = getFeaturedRecipes();
 // Obtener categorías
-$categories = getAllCategories();
+$categories = getAllCategories();   
 ?>
 
 <!DOCTYPE html>
@@ -15,7 +14,7 @@ $categories = getAllCategories();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recetas Deliciosas - Tu plataforma de recetas</title>    
+    <title>DATACHEFT - Tu plataforma de recetas</title>    
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/responsive.css">
 </head>
@@ -28,10 +27,12 @@ $categories = getAllCategories();
                 <h1>Descubre recetas increíbles</h1>
                 <p>Explora miles de recetas compartidas por nuestra comunidad</p>
                 <div class="search-container">
-                    <input type="text" id="search-input" placeholder="Buscar recetas...">
-                    <button id="search-button">Buscar</button>
+                    <form action="recipes.php" method="GET" id="search-form">
+                    <input type="text" id="search-input" name="search" placeholder="Buscar recetas..." style="width: 500px;">
+                        <button type="submit" id="search-button">Buscar</button>
+                    </form>
                 </div>
-            </div>
+            </div>  
         </section>
 
         <section class="featured-recipes">
@@ -40,7 +41,11 @@ $categories = getAllCategories();
                 <?php foreach ($featuredRecipes as $recipe): ?>
                 <div class="recipe-card">
                     <div class="recipe-image">
-                        <img src="<?php echo htmlspecialchars($recipe['image_url']); ?>" alt="<?php echo htmlspecialchars($recipe['title']); ?>">
+                        <?php if (isset($recipe['image_url']) && !empty($recipe['image_url'])): ?>
+                            <img src="<?php echo htmlspecialchars($recipe['image_url']); ?>" alt="<?php echo htmlspecialchars($recipe['title']); ?>">
+                        <?php else: ?>
+                            <img src="assets/images/default-recipe.jpg" alt="<?php echo htmlspecialchars($recipe['title']); ?>">
+                        <?php endif; ?>
                     </div>
                     <div class="recipe-info">
                         <h3><?php echo htmlspecialchars($recipe['title']); ?></h3>
@@ -62,12 +67,16 @@ $categories = getAllCategories();
             <h2>Explora por Categorías</h2>
             <div class="category-grid">
                 <?php foreach ($categories as $category): ?>
-                <a href="categories.php?category=<?php echo urlencode($category['name']); ?>" class="category-card">
+                <a href="recipes.php?category=<?php echo urlencode($category['name']); ?>" class="category-card">
                     <div class="category-icon">
-                        <img src="<?php echo htmlspecialchars($category['icon_url']); ?>" alt="<?php echo htmlspecialchars($category['name']); ?>">
+                        <?php if (isset($category['icon_url']) && !empty($category['icon_url'])): ?>
+                            <img src="<?php echo htmlspecialchars($category['icon_url']); ?>" alt="<?php echo htmlspecialchars($category['name']); ?>">
+                        <?php else: ?>
+                            <i class="category-default-icon"></i>
+                        <?php endif; ?>
                     </div>
                     <h3><?php echo htmlspecialchars($category['name']); ?></h3>
-                    <p><?php echo htmlspecialchars($category['recipe_count']); ?> recetas</p>
+                    <p><?php echo htmlspecialchars($category['recipe_count'] ?? 0); ?> recetas</p>
                 </a>
                 <?php endforeach; ?>
             </div>

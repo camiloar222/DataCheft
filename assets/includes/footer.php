@@ -2,7 +2,7 @@
     <div class="container">
         <div class="footer-content">
             <div class="footer-column">
-                <h3>Recetas Deliciosas</h3>
+                <h3>DataCheft</h3>
                 <p>Tu plataforma para descubrir y compartir recetas increíbles con la comunidad.</p>
             </div>
             
@@ -36,8 +36,8 @@
             <div class="footer-column">
                 <h3>Contacto</h3>
                 <ul class="footer-links">
-                    <li><a href="mailto:info@recetasdeliciosas.com">info@recetasdeliciosas.com</a></li>
-                    <li><a href="tel:+123456789">+12 345 6789</a></li>
+                    <li><a href="mailto:info@recetasdeliciosas.com">datacheft@gmail.com</a></li>
+                    <li><a href="tel:+123456789">01 800 3000 444</a></li>
                     <li><a href="#">Política de Privacidad</a></li>
                     <li><a href="#">Términos y Condiciones</a></li>
                 </ul>
@@ -45,7 +45,7 @@
         </div>
         
         <div class="footer-bottom">
-            <p>&copy; <?php echo date('Y'); ?> Recetas Deliciosas. Todos los derechos reservados.</p>
+            <p>&copy; <?php echo date('Y'); ?> DataCheft. Todos los derechos reservados.</p>
         </div>
     </div>
 </footer>

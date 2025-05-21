@@ -1,7 +1,7 @@
 <header>
     <div class="container">
         <nav class="navbar">
-            <a href="index.php" class="logo">Recetas Deliciosas</a>
+            <a href="index.php" class="logo">DataCheft - Recetas Deliciosas</a>
             
             <div class="mobile-menu-toggle" id="mobileMenuToggle">
                 <span>☰</span>

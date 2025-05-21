@@ -129,10 +129,15 @@ function getAllCategories() {
 
 
 // Función para obtener una receta por ID
-function getRecipeById($id) {
+function getRecipeById($recipeId) {
     global $recipesCollection;
     
-    return $recipesCollection->findOne(['_id' => new MongoDB\BSON\ObjectId($id)]);
+    try {
+        return $recipesCollection->findOne(['_id' => new MongoDB\BSON\ObjectId($recipeId)]);
+    } catch (Exception $e) {
+        error_log('Error al obtener receta: ' . $e->getMessage());
+        return null;
+    }
 }
 
 // Función para crear una nueva receta

@@ -42,9 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         $errors['name'] = 'Por favor, ingresa tu nombre';
     }
     
-    // Si se quiere cambiar la contraseña
     if (!empty($newPassword) || !empty($confirmPassword)) {
-        // Verificar contraseña actual
+
         if (empty($currentPassword)) {
             $errors['current_password'] = 'Por favor, ingresa tu contraseña actual';
         } elseif (!password_verify($currentPassword, $user['password'])) {
@@ -105,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mi Perfil - Recetas Deliciosas</title>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="scss/responsive.css">
+    <link rel="stylesheet" href="css/responsive.css">
     <style>
         /* Estilos específicos para la página de perfil */
         .profile-container {
@@ -495,7 +494,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                                         </div>
                                         <div class="recipe-actions">
                                             <a href="recipe-details.php?id=<?php echo $recipe['_id']; ?>" class="btn btn-sm">Ver</a>
-                                            <a href="edit-recipe.php?id=<?php echo $recipe['_id']; ?>" class="btn btn-sm btn-secondary">Editar</a>
+                                            <a href="edit-recipe.php?id=<?php echo $recipe['_id']->__toString(); ?>" class="btn btn-sm btn-secondary">Editar</a>
                                             <button class="btn btn-sm btn-danger delete-recipe" data-id="<?php echo $recipe['_id']; ?>">Eliminar</button>
                                         </div>
                                     </div>
